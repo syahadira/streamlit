@@ -91,7 +91,7 @@ def build_definition_with_validation(
       ``asset_dir`` after resolution.
     - For file-backed entries, the URL sent to the frontend is the
       ``asset_dir``-relative path, served under
-      ``/bidi-components/<component>/<relative_path>``.
+      ``/_stcore/bidi-components/<component>/<relative_path>``.
     """
 
     asset_root = manager.get_component_asset_root(component_key)

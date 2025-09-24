@@ -218,7 +218,7 @@ class BidiComponentDefinition:
         """Return the asset-dir-relative URL path for CSS when file-backed.
 
         When present, servers construct
-        ``/bidi-components/<component>/<css_url>`` using this value. If
+        ``/_stcore/bidi-components/<component>/<css_url>`` using this value. If
         ``css_asset_relative_path`` is specified, it takes precedence over the
         filename derived from ``css``.
         """
@@ -233,7 +233,7 @@ class BidiComponentDefinition:
         """Return the asset-dir-relative URL path for JS when file-backed.
 
         When present, servers construct
-        ``/bidi-components/<component>/<js_url>`` using this value. If
+        ``/_stcore/bidi-components/<component>/<js_url>`` using this value. If
         ``js_asset_relative_path`` is specified, it takes precedence over the
         filename derived from ``js``.
         """
