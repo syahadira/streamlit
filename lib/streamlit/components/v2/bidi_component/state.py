@@ -42,7 +42,7 @@ class BidiComponentState(TypedDict, total=False):
 
 
 class BidiComponentResult(AttributeDictionary):
-    """Rich return object for ``st.bidi_component``.
+    """Rich return object for ``st._bidi_component``.
 
     It behaves like a regular :class:`dict` *and* allows attribute-style
     access to its keys, mirroring the behaviour of
@@ -50,6 +50,15 @@ class BidiComponentResult(AttributeDictionary):
     :pyclass:`~streamlit.delta_generator.DeltaGenerator` instance responsible
     for rendering the component via the dedicated :pyattr:`delta_generator`
     property.
+
+    Parameters
+    ----------
+    dg : DeltaGenerator
+        The DeltaGenerator that rendered this component.
+    state_vals : dict[str, Any] or None
+        A dictionary of state values from the component.
+    trigger_vals : dict[str, Any] or None
+        A dictionary of trigger values from the component.
     """
 
     def __init__(

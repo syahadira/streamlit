@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from __future__ import annotations
 
 import os
@@ -20,14 +19,30 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from streamlit.components.v2 import component as component_api
 from streamlit.components.v2.component_manager import BidiComponentManager
 from streamlit.components.v2.component_registry import BidiComponentDefinition
 from streamlit.components.v2.manifest_scanner import ComponentConfig, ComponentManifest
 
+if TYPE_CHECKING:
+    import pytest
+
 
 def _setup_manager_with_manifest(tmp_path: Path) -> tuple[BidiComponentManager, str]:
-    """Helper to create a manager and register a manifest-backed component."""
+    """Set up a BidiComponentManager with a manifest-backed component.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        A temporary path to create the component package and assets.
+
+    Returns
+    -------
+    tuple[BidiComponentManager, str]
+        A tuple containing the component manager and the component name.
+    """
     manager = BidiComponentManager()
 
     package_root = tmp_path / "pkg"
@@ -49,8 +64,7 @@ def _setup_manager_with_manifest(tmp_path: Path) -> tuple[BidiComponentManager, 
 
 
 def test_manager_uses_lock_for_api_inputs(tmp_path: Path) -> None:
-    """Manager should expose a lock and handle inputs safely during updates."""
-
+    """Verify manager exposes a lock and handles inputs safely during updates."""
     manager, comp_name = _setup_manager_with_manifest(tmp_path)
 
     # The manager is expected to expose an _api_inputs_lock used to guard access.
@@ -75,7 +89,6 @@ def test_concurrent_record_and_change_no_exceptions(tmp_path: Path) -> None:
     in many cases due to the GIL, but combined with the lock assertion test
     above, we get stronger guarantees.
     """
-
     manager, comp_name = _setup_manager_with_manifest(tmp_path)
 
     stop_event = threading.Event()
@@ -115,7 +128,7 @@ def test_concurrent_record_and_change_no_exceptions(tmp_path: Path) -> None:
 
 
 def test_get_component_path_prefers_asset_dir_when_present() -> None:
-    """Manager should return manifest-declared asset_dir over registry paths."""
+    """Verify manager returns manifest asset_dir over registry paths."""
     manager = BidiComponentManager()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -157,7 +170,7 @@ def test_get_component_path_prefers_asset_dir_when_present() -> None:
 
 
 def test_register_from_manifest_does_not_require_asset_dir() -> None:
-    """Registering a component without asset_dir should work."""
+    """Verify registering a component without asset_dir works."""
     manager = BidiComponentManager()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -180,10 +193,7 @@ def test_register_from_manifest_does_not_require_asset_dir() -> None:
 def test_on_components_changed_preserves_html_and_resolves_assets(
     tmp_path: Path,
 ) -> None:
-    """Manager recompute should preserve html and resolve css/js under asset_dir.
-
-    Verifies the single typed update path via registry.update_component.
-    """
+    """Verify recompute preserves html and resolves assets under asset_dir."""
     manager = BidiComponentManager()
 
     # Prepare manifest with asset_dir
@@ -226,3 +236,101 @@ def test_on_components_changed_preserves_html_and_resolves_assets(
     # Content properties must be None for file-backed entries
     assert d.css_content is None
     assert d.js_content is None
+
+
+def _make_manifest(pkg_name: str, comp_name: str, asset_dir: str) -> ComponentManifest:
+    """Create a ComponentManifest for testing."""
+    return ComponentManifest(
+        name=pkg_name,
+        version="0.0.1",
+        components=[ComponentConfig(name=comp_name, asset_dir=asset_dir)],
+    )
+
+
+def _write(path: Path, content: str) -> None:
+    """Write content to a file, creating parent directories if needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
+def test_re_resolves_js_glob_on_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that JS glob paths are re-resolved on component changes."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        assets = root / "assets"
+        js_dir = assets / "js"
+
+        # Initial file
+        first_js = js_dir / "index-abc123.js"
+        _write(first_js, "console.log('abc');")
+
+        # Register manifest with asset_dir
+        manager = BidiComponentManager()
+        manifest = _make_manifest("pkg", "comp", asset_dir="assets")
+        manager.register_from_manifest(manifest, root)
+
+        # Bind public API to our manager instance
+        monkeypatch.setattr(
+            "streamlit.components.v2.get_bidi_component_manager",
+            lambda: manager,
+        )
+
+        # Register runtime API with a JS glob under asset_dir
+        component_api("pkg.comp", js="js/index-*.js")
+        initial = manager.get("pkg.comp")
+        assert initial is not None
+        assert initial.js is not None
+        assert initial.js.endswith("index-abc123.js")
+        assert initial.js_url == "js/index-abc123.js"
+
+        # Simulate a new build replacing the hashed file
+        first_js.unlink()
+        second_js = js_dir / "index-def456.js"
+        _write(second_js, "console.log('def');")
+
+        # Trigger change handling
+        manager._on_components_changed(["pkg.comp"])  # type: ignore[attr-defined]
+
+        updated = manager.get("pkg.comp")
+        assert updated is not None
+        assert updated.js is not None
+        assert updated.js.endswith("index-def456.js")
+        assert updated.js_url == "js/index-def456.js"
+
+
+def test_re_resolution_no_match_keeps_previous(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that re-resolution with no match preserves the previous value."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        assets = root / "assets"
+        js_dir = assets / "js"
+
+        # Initial file
+        first_js = js_dir / "index-abc123.js"
+        _write(first_js, "console.log('abc');")
+
+        manager = BidiComponentManager()
+        manifest = _make_manifest("pkg2", "comp", asset_dir="assets")
+        manager.register_from_manifest(manifest, root)
+
+        monkeypatch.setattr(
+            "streamlit.components.v2.get_bidi_component_manager",
+            lambda: manager,
+        )
+
+        component_api("pkg2.comp", js="js/index-*.js")
+        baseline = manager.get("pkg2.comp")
+        assert baseline is not None
+        assert baseline.js is not None
+        assert baseline.js.endswith("index-abc123.js")
+
+        # Remove the only matching file -> glob would have zero matches now
+        first_js.unlink()
+
+        manager._on_components_changed(["pkg2.comp"])  # type: ignore[attr-defined]
+
+        # Definition should remain unchanged
+        after = manager.get("pkg2.comp")
+        assert after is not None
+        assert after.js is not None
+        assert after.js.endswith("index-abc123.js")
