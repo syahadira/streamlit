@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Final, cast
+from typing import Any, Final, cast
 
 DEFAULT_LOG_MESSAGE: Final = "%(asctime)s %(levelname) -7s %(name)s: %(message)s"
 
@@ -68,6 +68,52 @@ def setup_formatter(logger: logging.Logger) -> None:
     # Import here to avoid circular imports
     from streamlit import config
 
+    # Check if structured (JSON) logging is enabled
+    enable_structured = False
+    if config._config_options:
+        try:
+            enable_structured = config.get_option("logger.enableStructuredLogs")
+        except Exception:  # noqa: S110
+            # If config option doesn't exist, default to False
+            pass
+
+    if enable_structured:
+        # Try to use JSON formatter if python-json-logger is available
+        try:
+            from pythonjsonlogger.json import JsonFormatter
+
+            formatter = JsonFormatter(
+                fmt=(
+                    "%(message)s %(levelname)s %(name)s %(pathname)s "
+                    "%(filename)s %(module)s %(funcName)s %(lineno)d "
+                    "%(process)d %(thread)d %(asctime)s"
+                )
+            )
+        except ImportError:
+            # python-json-logger not available, fall back to standard formatter
+            sys.stderr.write(
+                "Warning: logger.enableStructuredLogs is enabled but python-json-logger "
+                "is not installed. Falling back to standard logging format.\n"
+            )
+            formatter = _create_standard_formatter(config)
+        except Exception as e:
+            # Any other error during JSON formatter setup, fall back safely
+            sys.stderr.write(
+                f"Warning: Failed to configure JSON logging: {e}. "
+                "Falling back to standard logging format.\n"
+            )
+            formatter = _create_standard_formatter(config)
+    else:
+        formatter = _create_standard_formatter(config)
+
+    logger.streamlit_console_handler.setFormatter(formatter)  # type: ignore[attr-defined]
+
+    # Register the new console logger.
+    logger.addHandler(logger.streamlit_console_handler)  # type: ignore[attr-defined]
+
+
+def _create_standard_formatter(config: Any) -> logging.Formatter:
+    """Create a standard (non-JSON) log formatter."""
     if config._config_options:
         # logger is required in ConfigOption.set_value
         # Getting the config option before the config file has been parsed
@@ -77,10 +123,7 @@ def setup_formatter(logger: logging.Logger) -> None:
         message_format = DEFAULT_LOG_MESSAGE
     formatter = logging.Formatter(fmt=message_format)
     formatter.default_msec_format = "%s.%03d"
-    logger.streamlit_console_handler.setFormatter(formatter)  # type: ignore[attr-defined]
-
-    # Register the new console logger.
-    logger.addHandler(logger.streamlit_console_handler)  # type: ignore[attr-defined]
+    return formatter
 
 
 def update_formatter() -> None:

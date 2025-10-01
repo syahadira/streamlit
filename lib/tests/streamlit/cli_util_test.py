@@ -14,12 +14,14 @@
 
 from __future__ import annotations
 
+import sys
 import unittest
-from unittest.mock import patch
+from io import StringIO
+from unittest.mock import MagicMock, patch
 
 from parameterized import parameterized
 
-from streamlit.cli_util import open_browser
+from streamlit.cli_util import open_browser, print_to_cli
 
 
 class CliUtilTest(unittest.TestCase):
@@ -53,3 +55,65 @@ class CliUtilTest(unittest.TestCase):
                     open_browser("http://some-url")
                     assert webbrowser_open.called
                     assert not subprocess_popen.called
+
+    def test_print_to_cli_with_structured_logs_enabled(self):
+        """Test that print_to_cli routes through logging when structured logs enabled."""
+        from streamlit import config
+
+        with patch.object(config, "_config_options", new={}):
+            config._set_option("logger.enableStructuredLogs", True, "test")
+
+            # Mock the streamlit logger
+            mock_logger = MagicMock()
+            with patch("logging.getLogger", return_value=mock_logger):
+                print_to_cli("Test message", fg="green", bold=True)
+
+                # Verify message was logged through logging system
+                mock_logger.info.assert_called_once()
+                call_args = mock_logger.info.call_args
+                assert call_args[0][0] == "Test message"
+                assert call_args[1]["extra"]["cli_color"] == "green"
+                assert call_args[1]["extra"]["cli_style"] == "bold"
+
+    def test_print_to_cli_with_structured_logs_disabled(self):
+        """Test that print_to_cli uses click.secho when structured logs disabled."""
+        from streamlit import config
+
+        with patch.object(config, "_config_options", new={}):
+            config._set_option("logger.enableStructuredLogs", False, "test")
+
+            with patch("click.secho") as mock_secho:
+                print_to_cli("Test message", fg="red")
+
+                # Verify message was printed via click.secho
+                mock_secho.assert_called_once_with("Test message", fg="red")
+
+    def test_print_to_cli_fallback_without_click(self):
+        """Test that print_to_cli falls back to print() if click not available."""
+        from streamlit import config
+
+        with patch.object(config, "_config_options", new={}):
+            config._set_option("logger.enableStructuredLogs", False, "test")
+
+            # Mock click import to raise ImportError
+            with patch.dict(sys.modules, {"click": None}):
+                stdout_capture = StringIO()
+                with patch("sys.stdout", new=stdout_capture):
+                    with patch("builtins.print") as mock_print:
+                        print_to_cli("Test message")
+                        mock_print.assert_called_once_with("Test message", flush=True)
+
+    def test_print_to_cli_error_handling(self):
+        """Test that print_to_cli falls back to click if logging routing fails."""
+        from streamlit import config
+
+        with patch.object(config, "_config_options", new={}):
+            config._set_option("logger.enableStructuredLogs", True, "test")
+
+            # Mock logging.getLogger to raise an exception
+            with patch("logging.getLogger", side_effect=Exception("Test error")):
+                with patch("click.secho") as mock_secho:
+                    print_to_cli("Test message", fg="blue")
+
+                    # Should fall back to click.secho
+                    mock_secho.assert_called_once_with("Test message", fg="blue")

@@ -511,9 +511,21 @@ class Server:
 
 
 def _set_tornado_log_levels() -> None:
-    if not config.get_option("global.developmentMode"):
-        # Hide logs unless they're super important.
-        # Example of stuff we don't care about: 404 about .js.map files.
-        logging.getLogger("tornado.access").setLevel(logging.ERROR)
-        logging.getLogger("tornado.application").setLevel(logging.ERROR)
-        logging.getLogger("tornado.general").setLevel(logging.ERROR)
+    """Configure Tornado logger levels based on config settings."""
+    # Get configured Tornado log level
+    tornado_level_str = config.get_option("logger.tornadoLogLevel").upper()
+
+    # Map string level to logging constant
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    tornado_level = level_map.get(tornado_level_str, logging.ERROR)
+
+    # Apply level to all Tornado loggers
+    logging.getLogger("tornado.access").setLevel(tornado_level)
+    logging.getLogger("tornado.application").setLevel(tornado_level)
+    logging.getLogger("tornado.general").setLevel(tornado_level)

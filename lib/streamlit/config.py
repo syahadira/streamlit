@@ -524,6 +524,44 @@ def _logger_enable_rich() -> bool:
         return False
 
 
+@_create_option(
+    "logger.enableStructuredLogs",
+    visibility="hidden",
+    type_=bool,
+    scriptable=True,
+)
+def _logger_enable_structured_logs() -> bool:
+    """
+    Controls whether logs are formatted as structured JSON instead of plain text.
+
+    When enabled, all Streamlit and Tornado logs will be emitted as JSON objects
+    with fields like message, level, timestamp, logger_name, etc. This is useful
+    for log aggregation systems like Elasticsearch, Splunk, or CloudWatch.
+
+    Requires python-json-logger to be installed. If not available, falls back to
+    standard text logging.
+
+    Default: False
+    """
+    return False
+
+
+@_create_option("logger.tornadoLogLevel", type_=str)
+def _logger_tornado_log_level() -> str:
+    """Level of logging for Tornado web server: "error", "warning", "info", or "debug".
+
+    Tornado can be verbose with HTTP access logs at INFO level. This setting allows
+    controlling Tornado's log level independently from Streamlit's logger.level.
+
+    If not set, defaults to "error" in production mode and "info" in development mode.
+
+    Default: Matches global.developmentMode setting
+    """
+    if get_option("global.developmentMode"):
+        return "info"
+    return "error"
+
+
 # Config Section: Client #
 
 _create_section("client", "Settings for scripts that use Streamlit.")

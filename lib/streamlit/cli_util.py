@@ -27,8 +27,35 @@ def print_to_cli(message: str, **kwargs: Any) -> None:
     """Print a message to the terminal using click if available, else print
     using the built-in print function.
 
+    If logger.enableStructuredLogs is enabled, routes messages through the
+    logging system instead to maintain structured log format.
+
     You can provide any keyword arguments that click.secho supports.
     """
+    # Check if structured logging is enabled
+    try:
+        from streamlit import config
+
+        if config._config_options and config.get_option("logger.enableStructuredLogs"):
+            # Route through logging system to maintain JSON format
+            import logging
+
+            # Extract style information for logging context
+            extra = {}
+            if "fg" in kwargs:
+                extra["cli_color"] = kwargs["fg"]
+            if kwargs.get("bold"):
+                extra["cli_style"] = "bold"
+
+            # Log at INFO level (CLI messages are informational)
+            logging.getLogger("streamlit").info(
+                message.strip() if message else message, extra=extra if extra else None
+            )
+            return
+    except Exception:  # noqa: S110
+        # If anything fails, fall through to normal CLI output
+        pass
+
     try:
         import click
 
