@@ -808,12 +808,15 @@ function DataFrame({
     }
   }, [allColumns.length, columns.length])
 
+  const disableResize =
+    isInHorizontalLayout || widthConfig?.useContent ? true : false
+
   return (
     <StyledResizableContainer
       className="stDataFrame"
       data-testid="stDataFrame"
       ref={resizableContainerRef}
-      isInHorizontalLayout={isInHorizontalLayout}
+      disableResize={disableResize}
       onPointerDown={e => {
         if (resizableContainerRef.current) {
           // Prevent clicks on the scrollbar handle to propagate to the grid:
@@ -978,7 +981,7 @@ function DataFrame({
         // dataframes in horizontal layouts, so it is disabled. The
         // resize handles are also disabled so that the dataframe cannot be
         // stretched beyond the container width.
-        maxWidth={isInHorizontalLayout ? undefined : maxWidth}
+        maxWidth={disableResize ? undefined : maxWidth}
         size={resizableSize}
         enable={{
           top: false,
@@ -986,7 +989,7 @@ function DataFrame({
           bottom: false,
           left: false,
           topRight: false,
-          bottomRight: isInHorizontalLayout ? false : true,
+          bottomRight: disableResize ? false : true,
           bottomLeft: false,
           topLeft: false,
         }}
